@@ -1,0 +1,7 @@
+
+pymupdf
+pandas
+openpyxl
+pyyaml
+pyodbc
+pyinstaller

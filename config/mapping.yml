@@ -1,0 +1,52 @@
+
+document_type: "Generic Lab Report v1"
+fields:
+  - name: "case_id"
+    find:
+      type: "keyword_line"
+      keywords: ["Case ID", "Case Number", "Case No"]
+    required: true
+
+  - name: "nhs_number"
+    find:
+      type: "regex"
+      pattern: "\\b(\\d{3}\\s?\\d{3}\\s?\\d{4})\\b"
+
+  - name: "given_name"
+    find:
+      type: "keyword_right"
+      keywords: ["Given name", "First name"]
+
+  - name: "family_name"
+    find:
+      type: "keyword_right"
+      keywords: ["Family name", "Surname"]
+
+  - name: "dob"
+    find:
+      type: "regex"
+      pattern: "\\b(\\d{2}/\\d{2}/\\d{4})\\b"
+
+  - name: "report_date"
+    find:
+      type: "keyword_right"
+      keywords: ["Report date", "Date of report"]
+
+  - name: "result"
+    find:
+      type: "keyword_line"
+      keywords: ["Result", "Outcome"]
+
+dedupe_key: ["case_id"]
+
+access:
+  db_path: "C:/Data/Access/MyDatabase.accdb"
+  table: "Cases"
+  column_map:
+    case_id: "CaseID"
+    nhs_number: "NHSNumber"
+    given_name: "GivenName"
+    family_name: "FamilyName"
+    dob: "DOB"
+    report_date: "ReportDate"
+    result: "Result"
