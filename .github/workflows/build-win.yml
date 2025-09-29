@@ -19,7 +19,7 @@ jobs:
           pip install pymupdf pandas openpyxl pyyaml pyodbc pyinstaller
       - name: Build EXE
         run: |
-          pyinstaller --onefile --noconsole PDF_Intake/pdf_to_access_app.py
+          pyinstaller --onefile --noconsole src/pdf_to_access_app.py
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
