@@ -1,10 +1,7 @@
-name: Build Windows EXE
+# .github/workflows/build-win32.yml
+name: Build 32-bit EXE
 
-#on:
-#  workflow_dispatch:
-#  push:
-#    branches: [ main ]
-
+on: workflow_dispatch
 jobs:
   build:
     runs-on: windows-latest
@@ -13,15 +10,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install deps
-        run: |
-          pip install --upgrade pip
-          pip install pymupdf pandas openpyxl pyyaml pyodbc pyinstaller
-      - name: Build EXE
-        run: |
+          architecture: 'x86'
+      - run: |
+          pip install -r requirements.txt
           pyinstaller --onefile --noconsole src/pdf_to_access_app.py
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: pdf_to_access_app
+          name: pdf_to_access_app-win32
           path: dist/pdf_to_access_app.exe
