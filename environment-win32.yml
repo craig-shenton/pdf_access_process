@@ -1,0 +1,14 @@
+name: win32build
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8           # 32-bit, widely supported by win-32 packages
+  - pandas=1.1.5
+  - openpyxl
+  - pyyaml
+  - pyodbc
+  - pymupdf=1.22.*       # adjust if your PDFs need a newer version
+  - pip
+  - pip:
+      - pyinstaller
