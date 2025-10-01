@@ -1,6 +1,7 @@
 # .github/workflows/build-win32.yml
 name: Build 32-bit EXE
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -8,31 +9,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Provision a 32-bit Miniconda and create the env from environment-win32.yml
-      - name: Set up 32-bit Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+      # Install 32-bit Python 3.8 on the runner
+      - uses: actions/setup-python@v5
         with:
-          miniforge-version: latest
-          python-version: "3.8"
-          architecture: "x86"        # critical for 32-bit
-          activate-environment: win32build
-          environment-file: environment-win32.yml
-          channels: conda-forge,defaults
-          auto-update-conda: true
+          python-version: '3.8'
+          architecture: 'x86'
 
-      - name: Verify env
-        shell: bash
+      - name: Install dependencies (win32 wheels)
         run: |
-          python -c "import struct, sys; print('Py bits:', struct.calcsize('P')*8, sys.version)"
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: ^
+            pandas==1.1.5 ^
+            openpyxl ^
+            pyyaml ^
+            pyodbc ^
+            pymupdf==1.22.5 ^
+            pyinstaller==5.13.0
+
+      - name: Verify environment
+        run: |
+          python -c "import struct, sys; print('Python bits:', struct.calcsize('P')*8, sys.version)"
           python -c "import pandas, fitz, pyodbc; print('pandas', pandas.__version__); print('fitz OK'); print('pyodbc OK')"
 
       - name: Build EXE
-        shell: bash
         run: |
-          python -m PyInstaller --onefile --noconsole src/pdf_to_access_app.py
+          python -m PyInstaller --onefile --noconsole src\\pdf_to_access_app.py
 
-      - name: Upload artefact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: pdf_to_access_app-win32
-          path: dist/pdf_to_access_app.exe
+          path: dist\\pdf_to_access_app.exe
