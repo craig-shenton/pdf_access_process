@@ -1,20 +1,38 @@
 # .github/workflows/build-win32.yml
 name: Build 32-bit EXE
-
 on: workflow_dispatch
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      # Provision a 32-bit Miniconda and create the env from environment-win32.yml
+      - name: Set up 32-bit Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: '3.11'
-          architecture: 'x86'
-      - run: |
-          pip install -r requirements.txt
-          pyinstaller --onefile --noconsole src/pdf_to_access_app.py
-      - uses: actions/upload-artifact@v4
+          miniforge-version: latest
+          python-version: "3.8"
+          architecture: "x86"        # critical for 32-bit
+          activate-environment: win32build
+          environment-file: environment-win32.yml
+          channels: conda-forge,defaults
+          auto-update-conda: true
+
+      - name: Verify env
+        shell: bash
+        run: |
+          python -c "import struct, sys; print('Py bits:', struct.calcsize('P')*8, sys.version)"
+          python -c "import pandas, fitz, pyodbc; print('pandas', pandas.__version__); print('fitz OK'); print('pyodbc OK')"
+
+      - name: Build EXE
+        shell: bash
+        run: |
+          python -m PyInstaller --onefile --noconsole src/pdf_to_access_app.py
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
         with:
           name: pdf_to_access_app-win32
           path: dist/pdf_to_access_app.exe
