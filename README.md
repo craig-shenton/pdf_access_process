@@ -1,13 +1,12 @@
-# PDF to Excel to Access Uploader
+# PDF to CSV Review Helper
 
-This application extracts structured data from PDF reports, lets you review and edit the results in Excel, then uploads approved records into a Microsoft Access database. It ships as a single desktop app.
+This application extracts structured data from PDF reports, lets you review and edit the results in a spreadsheet, and produces a CSV ready for manual import into Microsoft Access (or any other downstream system).
 
 ## Quick Start for end users (Windows)
 
 ### What you need
 
-* A Windows PC with the **Microsoft Access Database Engine** installed. The bitness must match the executable.
-* An Access database file (`.accdb` or `.mdb`) whose path is set in `src/config/mapping.yml`.
+* A Windows PC. Install the **Microsoft Access Database Engine** if you plan to import the CSV into Access.
 * The provided `src` folder structure.
 
 ### Folder layout
@@ -22,7 +21,7 @@ src/
     archive/
     rejected/
   output/
-    review.xlsx
+    review.csv
   logs/
 ```
 
@@ -30,11 +29,10 @@ src/
 
 1. Place PDFs into `src/input/inbox`.
 2. Run `src/pdf_to_access_app.exe`.
-3. Select **Extract to Excel**. This creates `src/output/review.xlsx`.
-4. Select **Open review workbook**, correct values as needed, then set `_review_status` to `APPROVED` or `REJECTED`.
-5. Save and close Excel.
-6. Select **Upload to Access**. The app inserts approved rows, moves PDFs to `input/archive` or `input/rejected`, and writes a log in `logs/`.
-7. Use **Test Access connection** to verify connectivity if required.
+3. Select **Extract for review (CSV)**. This creates `src/output/review.csv`.
+4. Select **Open review CSV**, correct values as needed, then set `_review_status` to `APPROVED` or `REJECTED` for each row.
+5. Save and close the CSV.
+6. Use your own Microsoft Access process (for example, a saved macro or TransferText action) to load the approved rows from `review.csv`.
 
 ## Developer guide
 
@@ -47,11 +45,11 @@ src/
   pip install -r requirements.txt
   ```
 
-* For Windows upload and Windows builds, install the **Microsoft Access ODBC driver** (Access Database Engine) that matches your Python and build bitness.
+* Install the Microsoft Access Database Engine only if you plan to run Access imports manually on the same machine.
 
 ### Configuration: `src/config/mapping.yml`
 
-Defines fields to extract, optional de-duplication keys, and Access connection details.
+Defines fields to extract, optional de-duplication keys, and output file names.
 
 Supported strategies:
 
@@ -70,11 +68,8 @@ fields:
 
 dedupe_key: ["case_id"]   # optional
 
-access:
-  db_path: "C:/Data/Access/MyDatabase.accdb"
-  table: "Cases"
-  column_map:
-    case_id: "CaseID"
+output:
+  review_csv: "review.csv"
 ```
 
 ### Run locally
@@ -87,7 +82,7 @@ The app expects:
 
 * PDFs in `src/input/inbox`
 * Configuration in `src/config/mapping.yml`
-* It writes `src/output/review.xlsx` and logs to `src/logs`
+* It writes `src/output/review.csv`
 
 ### Build a single-file executable (Windows)
 
@@ -102,7 +97,6 @@ You can also use a Windows GitHub Actions runner to produce the `.exe`.
 
 ### Troubleshooting
 
-* **Access driver errors**. Ensure the Access Database Engine is installed and that its bitness matches the executable.
 * **Nothing extracted**. Adjust `mapping.yml` keywords or regex. Confirm your PDFs are text-searchable. For scanned PDFs, add an OCR pre-pass.
-* **Upload issues**. Confirm `access.table` and all `access.column_map` destinations exist in the Access database.
-* **File in use**. Close `review.xlsx` before running the upload.
+* **Spreadsheet shows strange characters**. Ensure your editor opens `review.csv` as UTF-8 with BOM.
+* **Access import issues**. Confirm your manual Access process references the correct CSV path and column names.
