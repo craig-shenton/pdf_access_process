@@ -1,102 +1,89 @@
 # PDF to CSV Review Helper
 
-This application extracts structured data from PDF reports, lets you review and edit the results in a spreadsheet, and produces a CSV ready for manual import into Microsoft Access (or any other downstream system).
+This desktop application extracts structured information from PDF lab reports, lets you verify the
+results in a spreadsheet, and exports a CSV that is ready for a downstream Microsoft Access import
+(or any other workflow that consumes CSV files).
 
-## Quick Start for end users (Windows)
+## Features
 
-### What you need
+* Point the app at a root folder and it will ensure the expected sub-folders exist.
+* Extract values from PDFs using keyword, keyword-right, or regular expression strategies defined in
+  `config/mapping.yml`.
+* Produce a review-ready CSV that highlights extraction success, failures, and notes.
+* Launch the review CSV directly from the UI for quick editing before you import approved rows into
+  Access.
 
-* A Windows PC. Install the **Microsoft Access Database Engine** if you plan to import the CSV into Access.
-* The provided `src` folder structure.
+## Project layout
 
-### Folder layout
-
-```bash
+```
+config/
+  mapping.yml        # field definitions and output file name
+input/
+  inbox/             # drop PDFs here
+  archive/
+  rejected/
+output/
+  review.csv         # generated CSV for review and manual import
+logs/
 src/
-  pdf_to_access_app.exe
-  config/
-    mapping.yml
-  input/
-    inbox/
-    archive/
-    rejected/
-  output/
-    review.csv
-  logs/
+  pdf_to_access_app.py
 ```
 
-### Steps
+The packaged Windows executable mirrors this layout inside the folder where it is extracted.
 
-1. Place PDFs into `src/input/inbox`.
-2. Run `src/pdf_to_access_app.exe`.
-3. Select **Extract for review (CSV)**. This creates `src/output/review.csv`.
-4. Select **Open review CSV**, correct values as needed, then set `_review_status` to `APPROVED` or `REJECTED` for each row.
-5. Save and close the CSV.
-6. Use your own Microsoft Access process (for example, a saved macro or TransferText action) to load the approved rows from `review.csv`.
+## Running the app from source
 
-## Developer guide
+1. Install Python 3.11 or newer.
+2. Install dependencies:
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+3. Launch the application from the project root:
+   ```bash
+   python src/pdf_to_access_app.py
+   ```
+4. Use the **Project root** picker to point the UI at your working folder (the default is the
+   repository root). The application will create the expected sub-folders if they do not exist.
+5. Drop PDFs into `input/inbox`, choose **Extract for review (CSV)**, and then review the generated
+   CSV before importing the approved records into Access using your own process.
 
-### Prerequisites
+## Running the packaged EXE
 
-* Python 3.11 or later.
-* Install dependencies:
+A pre-built `pdf_to_access_app.exe` can be distributed to Windows users. Place it alongside the
+`config`, `input`, `output`, and `logs` folders. Double-click the executable to launch the same UI as
+running from source.
 
-  ```bash
-  pip install -r requirements.txt
-  ```
+## Building a Windows executable (64-bit)
 
-* Install the Microsoft Access Database Engine only if you plan to run Access imports manually on the same machine.
+You can generate a standalone executable either locally on Windows or via GitHub Actions.
 
-### Configuration: `src/config/mapping.yml`
-
-Defines fields to extract, optional de-duplication keys, and output file names.
-
-Supported strategies:
-
-* `keyword_right` captures text to the right of a keyword in the same block.
-* `keyword_line` captures the remainder of the line after a keyword.
-* `regex` extracts using a regular expression.
-
-Minimum keys:
-
-```yaml
-fields:
-  - name: "case_id"
-    find:
-      type: "keyword_line"
-      keywords: ["Case ID"]
-
-dedupe_key: ["case_id"]   # optional
-
-output:
-  review_csv: "review.csv"
-```
-
-### Run locally
+### Local build
 
 ```bash
-python src/pdf_to_access_app.py
-```
-
-The app expects:
-
-* PDFs in `src/input/inbox`
-* Configuration in `src/config/mapping.yml`
-* It writes `src/output/review.csv`
-
-### Build a single-file executable (Windows)
-
-Run on a Windows machine or a Windows CI runner:
-
-```bash
+python -m pip install -r requirements.txt
 pyinstaller --onefile --noconsole src/pdf_to_access_app.py
-# Output: dist/pdf_to_access_app.exe
+# Result: dist/pdf_to_access_app.exe
 ```
 
-You can also use a Windows GitHub Actions runner to produce the `.exe`.
+### GitHub Actions build
 
-### Troubleshooting
+Trigger the **Build Windows EXE** workflow. It uses a 64-bit Python runtime to install dependencies
+and run PyInstaller, then publishes the resulting `pdf_to_access_app.exe` artifact as
+`pdf_to_access_app-win64`.
 
-* **Nothing extracted**. Adjust `mapping.yml` keywords or regex. Confirm your PDFs are text-searchable. For scanned PDFs, add an OCR pre-pass.
-* **Spreadsheet shows strange characters**. Ensure your editor opens `review.csv` as UTF-8 with BOM.
-* **Access import issues**. Confirm your manual Access process references the correct CSV path and column names.
+## Configuration tips
+
+* `fields`: list the data points you want to extract. Each field requires a `find` strategy with a
+  `type` (`keyword_line`, `keyword_right`, or `regex`) and supporting parameters.
+* `dedupe_key`: optional list of columns used to flag potential duplicates in the review CSV.
+* `output.review_csv`: file name for the generated CSV. The file is written to the `output`
+  directory under the selected project root.
+
+## Troubleshooting
+
+* **No PDFs found** – Confirm that your PDFs are in the `input/inbox` directory under the selected
+  root.
+* **Empty or incorrect extraction results** – Refine the strategies in `config/mapping.yml` or
+  ensure the PDFs contain searchable text (run OCR if necessary).
+* **Cannot open the review CSV from the app** – Open the CSV manually from the `output` folder and
+  verify that Microsoft Excel or your preferred editor is installed.

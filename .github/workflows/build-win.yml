@@ -1,5 +1,5 @@
-# .github/workflows/build-win32.yml
-name: Build 32-bit EXE
+name: Build Windows EXE
+
 on:
   workflow_dispatch:
 
@@ -9,16 +9,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install 32-bit Python 3.8
-      - uses: actions/setup-python@v5
+      - name: Set up Python (64-bit)
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
-          architecture: 'x86'
+          python-version: '3.11'
+          architecture: 'x64'
 
-      - name: Install dependencies (win32 wheels)
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --only-binary=:all: pandas==1.1.5 openpyxl pyyaml pyodbc pymupdf==1.22.5 pyinstaller==5.13.0
+          python -m pip install -r requirements.txt
 
       - name: Verify environment
         run: |
@@ -32,5 +32,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pdf_to_access_app-win32
+          name: pdf_to_access_app-win64
           path: dist\\pdf_to_access_app.exe
