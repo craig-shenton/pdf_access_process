@@ -16,6 +16,7 @@ from output.review_writer import (
     write_review_csv,
 )
 from integrations.access_bulk import import_csv_to_access
+from ui.review_panel import ReviewPanel
 
 APP_TITLE = "PDF to CSV to Access"
 DEFAULT_ROOT = Path.cwd()
@@ -144,13 +145,13 @@ def extract_to_review(root: Path, logbox: tk.Text):
         cfg = load_cfg(root)
     except Exception as e:
         messagebox.showerror(APP_TITLE, f"Config error. {e}")
-        return
+        return None
 
     inbox = root / INBOX_DIR
     pdfs = sorted(p for p in inbox.glob("*") if p.suffix in PDF_EXTS)
     if not pdfs:
         messagebox.showinfo(APP_TITLE, f"No PDFs found in {inbox}")
-        return
+        return None
 
     log_line(logbox, f"Found {len(pdfs)} PDFs")
     rows = []
@@ -169,9 +170,14 @@ def extract_to_review(root: Path, logbox: tk.Text):
         cfg["output"]["access_ready_csv"],
         cfg,
     )
-    log_line(logbox, f"Review CSV written to: {review_path}")
+    log_line(logbox, f"Review CSV updated: {review_path}")
     log_line(logbox, f"Access-ready CSV written to: {access_ready_path}")
-    messagebox.showinfo(APP_TITLE, f"Review CSV created:\n{review_path}")
+    log_line(logbox, "Review table refreshed in the application UI.")
+    messagebox.showinfo(
+        APP_TITLE,
+        "Extraction complete. Review data has been loaded into the in-app table.",
+    )
+    return df
 
 
 def upload_to_access(root: Path, logbox: tk.Text):
@@ -296,22 +302,6 @@ def test_access(root: Path):
     except Exception as e:
         messagebox.showerror(APP_TITLE, f"Access connection failed. {e}")
 
-def open_review(root: Path):
-    try:
-        cfg = load_cfg(root)
-    except Exception as e:
-        messagebox.showerror(APP_TITLE, f"Config error. {e}")
-        return
-    csv_path = root / OUTPUT_DIR / cfg["output"]["review_csv"]
-    if not csv_path.exists():
-        messagebox.showinfo(APP_TITLE, "No review CSV found yet.")
-        return
-    try:
-        import os
-        os.startfile(str(csv_path))
-    except Exception as e:
-        messagebox.showerror(APP_TITLE, f"Could not open review CSV. {e}")
-
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -321,11 +311,13 @@ class App(tk.Tk):
 
         self.root_dir = tk.StringVar(value=str(DEFAULT_ROOT))
         self.create_widgets()
+        self.try_load_existing_review()
 
     def browse_root(self):
         chosen = filedialog.askdirectory(title="Select project root")
         if chosen:
             self.root_dir.set(chosen)
+            self.try_load_existing_review()
 
     def create_widgets(self):
         frm = ttk.Frame(self, padding=12)
@@ -340,27 +332,35 @@ class App(tk.Tk):
         btns = ttk.Frame(frm)
         btns.pack(fill="x", pady=6)
         ttk.Button(btns, text="Extract for review (CSV)", command=self.on_extract).pack(side="left", padx=4)
-        ttk.Button(btns, text="Open review CSV", command=self.on_open_review).pack(side="left", padx=4)
         ttk.Button(btns, text="Bulk upload to Access", command=self.on_upload).pack(side="left", padx=4)
         ttk.Button(btns, text="Test Access setup", command=self.on_test_access).pack(side="left", padx=4)
 
+        ttk.Label(frm, text="Review extracted data").pack(anchor="w", pady=(4, 2))
+        self.review_panel = ReviewPanel(frm)
+        self.review_panel.pack(fill="both", expand=True, pady=(0, 8))
+        self.review_panel.set_save_callback(lambda: self.save_review_changes(show_message=True))
+
         ttk.Label(frm, text="Activity log").pack(anchor="w")
-        self.logbox = tk.Text(frm, height=20, wrap="word", state="disabled", borderwidth=1, relief="solid")
+        self.logbox = tk.Text(frm, height=12, wrap="word", state="disabled", borderwidth=1, relief="solid")
         self.logbox.pack(fill="both", expand=True, pady=(2, 6))
 
-        ttk.Label(frm, text="Place PDFs in input/inbox. Review output/review CSV before bulk upload.").pack(anchor="w")
+        ttk.Label(frm, text="Place PDFs in input/inbox. Use the in-app review table above before bulk upload.").pack(anchor="w")
 
     def on_extract(self):
         root = Path(self.root_dir.get())
         ensure_dirs(root)
         try:
-            extract_to_review(root, self.logbox)
+            df = extract_to_review(root, self.logbox)
+            if df is not None:
+                self.review_panel.load_dataframe(df)
         except Exception as e:
             messagebox.showerror(APP_TITLE, f"Extraction failed. {e}")
 
     def on_upload(self):
         root = Path(self.root_dir.get())
         ensure_dirs(root)
+        # Persist any staged review edits before uploading
+        self.save_review_changes(show_message=False)
         try:
             upload_to_access(root, self.logbox)
         except Exception as e:
@@ -371,10 +371,59 @@ class App(tk.Tk):
         ensure_dirs(root)
         test_access(root)
 
-    def on_open_review(self):
+    def save_review_changes(self, show_message: bool = True) -> bool:
+        if not self.review_panel.has_data():
+            return False
+
         root = Path(self.root_dir.get())
         ensure_dirs(root)
-        open_review(root)
+        try:
+            cfg = load_cfg(root)
+        except Exception as e:
+            messagebox.showerror(APP_TITLE, f"Config error. {e}")
+            return False
+
+        try:
+            df = self.review_panel.get_dataframe()
+        except ValueError:
+            return False
+
+        outdir = root / OUTPUT_DIR
+        outdir.mkdir(parents=True, exist_ok=True)
+        try:
+            path = write_review_csv(outdir, cfg["output"]["review_csv"], df)
+        except Exception as e:
+            messagebox.showerror(APP_TITLE, f"Failed to save review CSV. {e}")
+            return False
+
+        log_line(self.logbox, f"Review CSV saved: {path}")
+        if show_message:
+            messagebox.showinfo(APP_TITLE, f"Review changes saved to:\n{path}")
+        return True
+
+    def try_load_existing_review(self) -> None:
+        root = Path(self.root_dir.get())
+        try:
+            cfg = load_cfg(root)
+        except Exception:
+            # Config not ready yet; clear any stale data
+            self.review_panel.clear()
+            return
+
+        review_csv = root / OUTPUT_DIR / cfg["output"]["review_csv"]
+        if not review_csv.exists():
+            self.review_panel.clear()
+            return
+
+        try:
+            df = load_review_dataframe(review_csv)
+        except Exception as e:
+            log_line(self.logbox, f"Failed to load existing review CSV: {e}")
+            self.review_panel.clear()
+            return
+
+        self.review_panel.load_dataframe(df)
+        log_line(self.logbox, f"Loaded review data from: {review_csv}")
 
 if __name__ == "__main__":
     app = App()
