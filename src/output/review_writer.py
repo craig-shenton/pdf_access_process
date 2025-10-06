@@ -1,7 +1,7 @@
-"""Helpers for preparing the CSV outputs used during review and Access import."""
+"""Helpers for preparing the CSV outputs used during review."""
 
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Iterable
 
 import pandas as pd
 
@@ -10,7 +10,7 @@ REVIEW_COMMENT_COLUMN = "_review_comment"
 DEDUPE_COLUMN = "_dedupe_key"
 NOTES_COLUMN = "_notes"
 SOURCE_PDF_COLUMN = "_source_pdf"
-ACCESS_READY_ENCODING = "utf-8-sig"
+REVIEW_CSV_ENCODING = "utf-8-sig"
 APPROVED_VALUE = "APPROVED"
 PENDING_VALUE = "PENDING"
 
@@ -54,43 +54,10 @@ def write_review_csv(outdir: Path, filename: str, df: pd.DataFrame) -> Path:
     outdir.mkdir(parents=True, exist_ok=True)
     path = outdir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding=ACCESS_READY_ENCODING)
+    df.to_csv(path, index=False, encoding=REVIEW_CSV_ENCODING)
     return path
 
 
 def load_review_dataframe(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, dtype=str, keep_default_na=False)
     return df
-
-
-def write_access_ready_csv(
-    review_df: pd.DataFrame,
-    outdir: Path,
-    filename: str,
-    cfg: dict,
-) -> Tuple[Path, pd.DataFrame]:
-    """Return the path to the Access-ready CSV and the approved review rows."""
-    outdir.mkdir(parents=True, exist_ok=True)
-    approved = review_df[
-        review_df[REVIEW_STATUS_COLUMN].astype(str).str.upper() == APPROVED_VALUE
-    ].copy()
-
-    column_map = cfg["access"]["column_map"]
-    missing = [col for col in column_map if col not in approved.columns]
-    if missing and not approved.empty:
-        raise ValueError(
-            "Approved rows are missing required columns: " + ", ".join(missing)
-        )
-
-    access_df = pd.DataFrame(columns=column_map.values())
-    if not approved.empty:
-        access_df = (
-            approved[list(column_map.keys())]
-            .rename(columns=column_map)
-            .fillna("")
-        )
-
-    path = outdir / filename
-    path.parent.mkdir(parents=True, exist_ok=True)
-    access_df.to_csv(path, index=False, encoding=ACCESS_READY_ENCODING)
-    return path, approved
