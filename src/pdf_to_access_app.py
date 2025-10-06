@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import yaml
 
-# Heavy dependencies imported lazily inside functions: fitz (PyMuPDF)
+from ui.app import PdfToAccessApp
 
 from output.review_writer import build_review_dataframe, write_review_csv
 
@@ -230,5 +230,4 @@ class App(tk.Tk):
         open_review(root)
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    main()
