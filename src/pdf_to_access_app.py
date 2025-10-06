@@ -2,22 +2,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 import re
-import shutil
 import yaml
-from datetime import datetime
 
 # Heavy dependencies imported lazily inside functions: fitz (PyMuPDF)
 
-from output.review_writer import (
-    REVIEW_STATUS_COLUMN,
-    build_review_dataframe,
-    load_review_dataframe,
-    write_access_ready_csv,
-    write_review_csv,
-)
-from integrations.access_bulk import import_csv_to_access
+from output.review_writer import build_review_dataframe, write_review_csv
 
-APP_TITLE = "PDF to CSV to Access"
+APP_TITLE = "PDF to CSV Review Helper"
 DEFAULT_ROOT = Path.cwd()
 
 # Centralise folder names to avoid drift
@@ -46,20 +37,12 @@ def load_cfg(root: Path):
     with open(cfg_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     # Light validation
-    for k in ["fields", "access"]:
-        if k not in cfg:
-            raise ValueError(f"Missing '{k}' in mapping.yml")
-    for k in ["db_path", "column_map", "bulk_import"]:
-        if k not in cfg["access"]:
-            raise ValueError(f"Missing 'access.{k}' in mapping.yml")
+    if "fields" not in cfg:
+        raise ValueError("Missing 'fields' in mapping.yml")
     if "output" not in cfg:
         raise ValueError("Missing 'output' section in mapping.yml")
-    for k in ["review_csv", "access_ready_csv"]:
-        if k not in cfg["output"]:
-            raise ValueError(f"Missing 'output.{k}' in mapping.yml")
-    for k in ["msaccess_path", "macro"]:
-        if k not in cfg["access"]["bulk_import"]:
-            raise ValueError(f"Missing 'access.bulk_import.{k}' in mapping.yml")
+    if "review_csv" not in cfg["output"]:
+        raise ValueError("Missing 'output.review_csv' in mapping.yml")
     return cfg
 
 def log_line(textbox: tk.Text, msg: str):
@@ -163,138 +146,20 @@ def extract_to_review(root: Path, logbox: tk.Text):
     outdir = root / OUTPUT_DIR
     outdir.mkdir(parents=True, exist_ok=True)
     review_path = write_review_csv(outdir, cfg["output"]["review_csv"], df)
-    access_ready_path, _ = write_access_ready_csv(
-        df,
-        outdir,
-        cfg["output"]["access_ready_csv"],
-        cfg,
-    )
     log_line(logbox, f"Review CSV written to: {review_path}")
-    log_line(logbox, f"Access-ready CSV written to: {access_ready_path}")
-    messagebox.showinfo(APP_TITLE, f"Review CSV created:\n{review_path}")
-
-
-def upload_to_access(root: Path, logbox: tk.Text):
-    try:
-        cfg = load_cfg(root)
-    except Exception as e:
-        messagebox.showerror(APP_TITLE, f"Config error. {e}")
-        return
-
-    review_csv = root / OUTPUT_DIR / cfg["output"]["review_csv"]
-    if not review_csv.exists():
-        messagebox.showerror(APP_TITLE, f"Cannot find {review_csv}. Run extraction first.")
-        return
-
-    try:
-        df = load_review_dataframe(review_csv)
-    except Exception as e:
-        messagebox.showerror(APP_TITLE, f"Could not read {review_csv}: {e}")
-        return
-    if REVIEW_STATUS_COLUMN not in df.columns:
-        messagebox.showerror(APP_TITLE, f"{review_csv.name} is missing the {REVIEW_STATUS_COLUMN} column.")
-        return
-
-    outdir = root / OUTPUT_DIR
-    outdir.mkdir(parents=True, exist_ok=True)
-    access_ready_path, approved_rows = write_access_ready_csv(
-        df,
-        outdir,
-        cfg["output"]["access_ready_csv"],
-        cfg,
+    log_line(
+        logbox,
+        "Use the review CSV to make corrections and import approved rows into Access manually.",
+    )
+    messagebox.showinfo(
+        APP_TITLE,
+        (
+            "Review CSV created.\n"
+            f"Path: {review_path}\n"
+            "After reviewing, import approved rows into Access using your own process."
+        ),
     )
 
-    if approved_rows.empty:
-        messagebox.showinfo(APP_TITLE, "No APPROVED rows found.")
-        return
-
-    bulk_cfg = cfg["access"]["bulk_import"]
-    inbox = root / INBOX_DIR
-    archive = root / ARCHIVE_DIR
-    rejected = root / REJECTED_DIR
-    archive.mkdir(parents=True, exist_ok=True)
-    rejected.mkdir(parents=True, exist_ok=True)
-
-    log_path = root / LOGS_DIR / f"bulk_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
-    log_messages = []
-
-    def record(msg: str):
-        log_messages.append(msg)
-        log_line(logbox, msg)
-
-    record(f"Preparing bulk import with {len(approved_rows)} approved rows")
-
-    try:
-        result = import_csv_to_access(
-            msaccess_path=bulk_cfg["msaccess_path"],
-            database_path=cfg["access"]["db_path"],
-            csv_path=access_ready_path,
-            macro=bulk_cfg.get("macro"),
-            timeout=bulk_cfg.get("timeout_sec", 600),
-            use_cmd_argument=bulk_cfg.get("use_cmd_argument", True),
-            extra_args=bulk_cfg.get("extra_args", []),
-            workdir=bulk_cfg.get("workdir"),
-            log_path=log_path,
-        )
-        record(f"Access import completed with return code {result.returncode}")
-        success = True
-    except Exception as e:
-        record(f"Access import failed: {e}")
-        success = False
-
-    target_dir = archive if success else rejected
-    action = "archived" if success else "rejected"
-    for _, row in approved_rows.iterrows():
-        src = row.get("_source_pdf", "")
-        if not src:
-            continue
-        pdf_path = inbox / src
-        if not pdf_path.exists():
-            continue
-        dest = target_dir / src
-        try:
-            shutil.move(str(pdf_path), str(dest))
-            record(f"{action.upper()} {src}")
-        except Exception as move_err:
-            record(f"Failed to move {src}: {move_err}")
-
-    if log_messages:
-        with open(log_path, "a", encoding="utf-8") as log:
-            for msg in log_messages:
-                log.write(msg + "\n")
-
-    if success:
-        summary = (
-            f"Bulk upload complete. Imported {len(approved_rows)} rows.\n"
-            f"Access-ready CSV: {access_ready_path}\nLog: {log_path}"
-        )
-        messagebox.showinfo(APP_TITLE, summary)
-    else:
-        summary = (
-            f"Bulk upload failed. Approved PDFs moved to rejected.\n"
-            f"Access-ready CSV: {access_ready_path}\nLog: {log_path}"
-        )
-        messagebox.showerror(APP_TITLE, summary)
-
-
-def test_access(root: Path):
-    try:
-        cfg = load_cfg(root)
-        db = Path(cfg["access"]["db_path"])
-        bulk_cfg = cfg["access"]["bulk_import"]
-        msaccess = Path(bulk_cfg["msaccess_path"])
-        issues = []
-        if not db.exists():
-            issues.append(f"Database not found: {db}")
-        if not msaccess.exists():
-            issues.append(f"msaccess.exe not found: {msaccess}")
-        if issues:
-            raise FileNotFoundError("; ".join(issues))
-        messagebox.showinfo(APP_TITLE, f"Access configuration looks OK.\nDB: {db}\nmsaccess: {msaccess}")
-    except Exception as e:
-        messagebox.showerror(APP_TITLE, f"Access connection failed. {e}")
 
 def open_review(root: Path):
     try:
@@ -341,14 +206,15 @@ class App(tk.Tk):
         btns.pack(fill="x", pady=6)
         ttk.Button(btns, text="Extract for review (CSV)", command=self.on_extract).pack(side="left", padx=4)
         ttk.Button(btns, text="Open review CSV", command=self.on_open_review).pack(side="left", padx=4)
-        ttk.Button(btns, text="Bulk upload to Access", command=self.on_upload).pack(side="left", padx=4)
-        ttk.Button(btns, text="Test Access setup", command=self.on_test_access).pack(side="left", padx=4)
 
         ttk.Label(frm, text="Activity log").pack(anchor="w")
         self.logbox = tk.Text(frm, height=20, wrap="word", state="disabled", borderwidth=1, relief="solid")
         self.logbox.pack(fill="both", expand=True, pady=(2, 6))
 
-        ttk.Label(frm, text="Place PDFs in input/inbox. Review output/review CSV before bulk upload.").pack(anchor="w")
+        ttk.Label(
+            frm,
+            text="Place PDFs in input/inbox. Review output/review CSV, then import approved rows into Access manually.",
+        ).pack(anchor="w")
 
     def on_extract(self):
         root = Path(self.root_dir.get())
@@ -357,19 +223,6 @@ class App(tk.Tk):
             extract_to_review(root, self.logbox)
         except Exception as e:
             messagebox.showerror(APP_TITLE, f"Extraction failed. {e}")
-
-    def on_upload(self):
-        root = Path(self.root_dir.get())
-        ensure_dirs(root)
-        try:
-            upload_to_access(root, self.logbox)
-        except Exception as e:
-            messagebox.showerror(APP_TITLE, f"Upload failed. {e}")
-
-    def on_test_access(self):
-        root = Path(self.root_dir.get())
-        ensure_dirs(root)
-        test_access(root)
 
     def on_open_review(self):
         root = Path(self.root_dir.get())

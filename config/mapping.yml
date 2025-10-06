@@ -41,20 +41,3 @@ dedupe_key: ["case_id"]
 
 output:
   review_csv: "review.csv"
-  access_ready_csv: "access_ready.csv"
-
-access:
-  db_path: "C:/Data/Access/MyDatabase.accdb"
-  column_map:
-    case_id: "CaseID"
-    nhs_number: "NHSNumber"
-    given_name: "GivenName"
-    family_name: "FamilyName"
-    dob: "DOB"
-    report_date: "ReportDate"
-    result: "Result"
-  bulk_import:
-    msaccess_path: "C:/Program Files/Microsoft Office/root/Office16/MSACCESS.EXE"
-    macro: "ImportApproved"
-    use_cmd_argument: true
-    timeout_sec: 600
