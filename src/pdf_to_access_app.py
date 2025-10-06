@@ -375,6 +375,11 @@ class App(tk.Tk):
         if not self.review_panel.has_data():
             return False
 
+        if hasattr(self.review_panel, "is_dirty") and not self.review_panel.is_dirty():
+            if show_message:
+                messagebox.showinfo(APP_TITLE, "No review changes to save.")
+            return False
+
         root = Path(self.root_dir.get())
         ensure_dirs(root)
         try:
@@ -399,6 +404,8 @@ class App(tk.Tk):
         log_line(self.logbox, f"Review CSV saved: {path}")
         if show_message:
             messagebox.showinfo(APP_TITLE, f"Review changes saved to:\n{path}")
+        if hasattr(self.review_panel, "mark_clean"):
+            self.review_panel.mark_clean()
         return True
 
     def try_load_existing_review(self) -> None:

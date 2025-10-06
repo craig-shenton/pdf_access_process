@@ -27,6 +27,7 @@ class ReviewPanel(ttk.Frame):
         self._save_callback: Optional[Callable[[], None]] = None
         self._edit_widget: Optional[tk.Widget] = None
         self._edit_var: Optional[tk.StringVar] = None
+        self._dirty: bool = False
 
         self._build_widgets()
 
@@ -34,7 +35,11 @@ class ReviewPanel(ttk.Frame):
         tree_container = ttk.Frame(self)
         tree_container.pack(fill="both", expand=True)
 
-        self.tree = ttk.Treeview(tree_container, show="headings")
+        self.tree = ttk.Treeview(
+            tree_container,
+            show="headings",
+            selectmode="extended",
+        )
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
         self.tree.bind("<Double-1>", self._start_edit)
 
@@ -100,6 +105,7 @@ class ReviewPanel(ttk.Frame):
         self._refresh_tree()
         self._update_status_options()
         self._clear_controls()
+        self._dirty = False
 
     def clear(self) -> None:
         self._teardown_editor()
@@ -110,6 +116,7 @@ class ReviewPanel(ttk.Frame):
         self.tree.configure(columns=self.columns)
         self._update_status_options()
         self._clear_controls()
+        self._dirty = False
 
     def has_data(self) -> bool:
         return self.current_df is not None
@@ -119,6 +126,12 @@ class ReviewPanel(ttk.Frame):
             raise ValueError("No review data loaded")
         # Return a copy to avoid accidental external mutation
         return self.current_df.copy()
+
+    def is_dirty(self) -> bool:
+        return self._dirty
+
+    def mark_clean(self) -> None:
+        self._dirty = False
 
     # UI interaction helpers --------------------------------------------
     def apply_review_updates(self) -> None:
@@ -139,6 +152,9 @@ class ReviewPanel(ttk.Frame):
             if REVIEW_COMMENT_COLUMN in self.current_df.columns:
                 self.current_df.at[index, REVIEW_COMMENT_COLUMN] = comment_value
                 self.tree.set(iid, REVIEW_COMMENT_COLUMN, comment_value)
+
+        if selected:
+            self._dirty = True
 
     # Internal methods --------------------------------------------------
     def _refresh_tree(self) -> None:
@@ -238,6 +254,7 @@ class ReviewPanel(ttk.Frame):
         self.tree.set(row_id, column_name, new_value)
         index = int(row_id)
         self.current_df.at[index, column_name] = new_value
+        self._dirty = True
         self._teardown_editor()
 
     def _cancel_edit(self) -> None:
